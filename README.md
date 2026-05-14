@@ -17,6 +17,15 @@ High-performance, protocol-agnostic proxy built on Swoole for HTTP, TCP, and SMT
 | Connection rate (sustained) | 18,067/sec |
 | CPU at peak | ~60% |
 
+## Benchmarks
+
+The `benchmarks/harness/` directory contains a language-agnostic benchmark harness
+that compares the PHP/Swoole implementation against the Rust port on three axes
+-- connections per MB of RAM, HTTP RPS, and TCP connections per second. Results
+land in a single CSV plus a markdown report with Rust-vs-PHP deltas. See
+[`benchmarks/harness/README.md`](benchmarks/harness/README.md) for usage and the
+C load generators at `benchmarks/tcpbench.c` and `benchmarks/httpbench/`.
+
 ## Requirements
 
 - PHP >= 8.4

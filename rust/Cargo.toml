@@ -1,0 +1,77 @@
+[workspace]
+members = ["crates/utopia-proxy", "bins/proxy"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+repository = "https://github.com/utopia-php/proxy"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.52", features = ["rt-multi-thread", "net", "time", "sync", "signal", "io-util", "macros", "fs"] }
+
+# HTTP
+hyper = { version = "1.9", features = ["server", "client", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "client", "client-legacy", "http1", "http2"] }
+http-body-util = "0.1" # added by http Phase 2
+bytes = "1.9" # added by http Phase 2
+futures-util = { version = "0.3", default-features = false, features = ["std"] } # added by http Phase 2
+
+# TLS
+tokio-rustls = { version = "0.26", default-features = false, features = ["tls12", "ring"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+rustls-pemfile = "2.2"
+rustls-pki-types = "1.14"
+webpki-roots = "1.0"
+
+# DNS
+hickory-resolver = "0.26"
+
+# Cache
+moka = { version = "0.12", features = ["future"] }
+
+# Net utilities
+ipnet = "2.12"
+socket2 = { version = "0.6", features = ["all"] }
+nix = { version = "0.31", features = ["net", "socket"] }
+
+# BPF (linux-only)
+libbpf-rs = "0.26"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Errors
+thiserror = "2.0"
+
+# Concurrency
+dashmap = "6.1"
+parking_lot = "0.12"
+
+# CLI
+clap = { version = "4.6", features = ["derive", "env"] }
+
+# Allocator
+tikv-jemallocator = "0.6"
+
+# Async traits
+async-trait = "0.1"
+
+# Core
+once_cell = "1.20"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

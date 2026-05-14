@@ -50,6 +50,20 @@
 # --network=host is recommended so SO_REUSEPORT, sockmap, and kernel
 # socket tuning work against the host's real TCP stack rather than
 # Docker's userspace bridge.
+#
+# Runtime tuning (measured in benchmarks/harness/results):
+#   --ulimit nofile=1048576:1048576              # 1M file descriptors
+#   --sysctl net.core.somaxconn=65535            # accept queue
+#   --sysctl net.ipv4.tcp_tw_reuse=1             # recycle TIME_WAIT faster
+#   --sysctl net.ipv4.ip_local_port_range="1024 65535"
+#   --sysctl net.ipv4.tcp_fin_timeout=15
+#
+# Host-side kernel tuning (apply on the Docker host, not in-container):
+#   sysctl -w fs.file-max=2097152
+#   sysctl -w vm.max_map_count=1048576
+#   sysctl -w net.core.netdev_max_backlog=32768
+#   sysctl -w net.ipv4.tcp_max_syn_backlog=32768
+# See benchmarks/setup.sh for the full tuning set.
 
 # ------------- stage 1: build the BPF object -------------
 FROM alpine:3.20 AS bpf-builder

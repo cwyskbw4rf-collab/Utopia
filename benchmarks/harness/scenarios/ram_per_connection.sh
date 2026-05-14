@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# ram_per_connection.sh -- ramp concurrent TCP connections, sample proxy RSS.
+#
+# For each batch size, launches `tcpbench hold` which opens N connections and
+# holds them parked idle while the harness samples the proxy's RSS 5x at 1s
+# intervals. The median sample determines rss_per_conn_kb and conns_per_mb.
+#
+# Stops early if tcpbench reports errors > 5% (accept queue / fd exhaustion).
+#
+# Usage: ram_per_connection.sh <impl> <csv_path>
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HARNESS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=../lib.sh
+source "${HARNESS_DIR}/lib.sh"
+
+impl="${1:?impl required}"
+csv="${2:?csv path required}"
+duration="${DURATION:-30}"
+
+# Batch sizes. Per-host ephemeral port cap is ~60k to a single (dst_ip, dst_port).
+# When LOAD_HOSTS is a multi-host list, the harness shards across source IPs.
+BATCHES=(1000 5000 10000 25000 50000 100000 200000 400000)
+
+echo "[ram] impl=${impl} -- starting backend + proxy"
+# Preload target env so TCP_POSTGRES_PORT etc are available in this shell
+# (start_proxy re-sources inside a subshell via $(...), losing the exports).
+load_target "${impl}" tcp || exit 1
+backend_pid="$(start_backend tcp)"
+proxy_pid="$(start_proxy "${impl}" tcp)"
+
+# Let things warm up before grabbing idle RSS.
+sleep 2
+idle_rss="$(sample_rss "${proxy_pid}")"
+echo "[ram] idle RSS: ${idle_rss} KB"
+
+port="$(proxy_port tcp)"
+target_host="$(proxy_connect_host)"
+
+trap 'stop_proxy "${proxy_pid}"; stop_backend "${backend_pid}"; remote_cleanup' EXIT
+
+for batch in "${BATCHES[@]}"; do
+    echo "[ram] batch=${batch}"
+    out="${PROXY_LOG_DIR}/ram_${impl}_${batch}.out"
+
+    if [[ -n "${LOAD_HOSTS:-}" || -n "${LOAD_HOST:-}" ]]; then
+        # Shard across all configured load hosts (1+ source IPs → more headroom
+        # past the per-host ~60k ephemeral port cap).
+        remote_run_load_shard tcpbench "hold" \
+            -h "${target_host}" -p "${port}" \
+            -c "${batch}" -d "${duration}" \
+            >"${out}" 2>&1 &
+    else
+        "${BENCHMARKS_DIR}/tcpbench" hold \
+            -h "${target_host}" -p "${port}" \
+            -c "${batch}" -d "${duration}" \
+            >"${out}" 2>&1 &
+    fi
+    bench_pid=$!
+    register_pid "${bench_pid}"
+
+    # Wait for connections to stabilize before sampling.
+    sleep 5
+
+    samples=()
+    for _ in 1 2 3 4 5; do
+        samples+=("$(sample_rss "${proxy_pid}")")
+        sleep 1
+    done
+    rss_median="$(median_of_samples "${samples[@]}")"
+
+    # Wait for tcpbench to finish (duration + buffer).
+    wait "${bench_pid}" 2>/dev/null || true
+
+    total_conns="$(parse_kv_output "${out}" total_conns)"
+    errors="$(parse_kv_output "${out}" errors)"
+    total_conns="${total_conns:-0}"
+    errors="${errors:-0}"
+
+    delta_kb=$(( rss_median - idle_rss ))
+    if (( delta_kb <= 0 )); then
+        delta_kb=1
+    fi
+
+    rss_per_conn_kb=$(awk -v d="${delta_kb}" -v b="${batch}" 'BEGIN { if (b > 0) printf "%.4f", d / b; else print 0 }')
+    conns_per_mb=$(awk -v d="${delta_kb}" -v b="${batch}" 'BEGIN { if (d > 0) printf "%.2f", b / (d / 1024.0); else print 0 }')
+
+    ts="$(date +%s)"
+    ensure_csv_header "${csv}"
+    # columns: timestamp,impl,scenario,concurrency,duration,ops_per_sec,conns_per_sec,avg_latency_us,rss_peak_kb,rss_per_conn_kb
+    record_csv "${csv}" \
+        "${ts}" "${impl}" "ram" "${batch}" "${duration}" \
+        "0" "${conns_per_mb}" "0" "${rss_median}" "${rss_per_conn_kb}"
+
+    echo "[ram] batch=${batch} total=${total_conns} errors=${errors} rss=${rss_median}KB rss_per_conn=${rss_per_conn_kb}KB conns_per_mb=${conns_per_mb}"
+
+    # Stop early if too many errors.
+    if (( batch > 0 )); then
+        error_ratio=$(awk -v e="${errors}" -v b="${batch}" 'BEGIN { printf "%.4f", e / b }')
+        exceed=$(awk -v r="${error_ratio}" 'BEGIN { print (r > 0.05) ? 1 : 0 }')
+        if (( exceed == 1 )); then
+            echo "[ram] error ratio ${error_ratio} > 0.05 -- stopping ramp"
+            break
+        fi
+    fi
+done
+
+stop_proxy "${proxy_pid}"
+stop_backend "${backend_pid}"
+trap - EXIT
+
+echo "[ram] done"

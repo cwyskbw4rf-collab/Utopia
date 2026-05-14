@@ -1,0 +1,71 @@
+[package]
+name = "utopia-proxy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "High-performance protocol-agnostic proxy library (Rust port of utopia-php/proxy)"
+
+[features]
+default = []
+sockmap = []
+jemalloc = ["dep:tikv-jemallocator"]
+
+[dependencies]
+tokio = { workspace = true }
+hyper = { workspace = true } # added by http Phase 2
+hyper-util = { workspace = true } # added by http Phase 2
+http-body-util = { workspace = true } # added by http Phase 2
+bytes = { workspace = true } # added by http Phase 2
+futures-util = { workspace = true } # added by http Phase 2
+hickory-resolver = { workspace = true }
+moka = { workspace = true }
+ipnet = { workspace = true }
+socket2 = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+async-trait = { workspace = true }
+once_cell = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+rustls-pki-types = { workspace = true }
+tokio-rustls = { workspace = true }
+tikv-jemallocator = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libbpf-rs = { workspace = true }
+nix = { workspace = true }
+libc = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[build-dependencies]
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+serde_json = "1.0" # added by tests phase
+async-trait = { workspace = true } # added by tests phase
+
+[lib]
+name = "utopia_proxy"
+path = "src/lib.rs"
+
+[[example]]
+name = "tcp"
+path = "examples/tcp.rs"
+
+[[example]]
+name = "http"
+path = "examples/http.rs"
+
+[[example]]
+name = "http_proxy"
+path = "examples/http_proxy.rs"
+
+[[example]]
+name = "smtp"
+path = "examples/smtp.rs"

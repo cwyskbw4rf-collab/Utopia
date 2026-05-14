@@ -16,6 +16,10 @@
 
 # Compiled binaries + BPF objects
 /benchmarks/tcpbench
+/benchmarks/httpbench/httpbench
 /benchmarks/sockmap_poc/relay.bpf.o
 /benchmarks/sockmap_poc/relay_test
 /src/Sockmap/relay.bpf.o
+
+# Benchmark harness results (CSVs, logs, reports)
+/benchmarks/harness/results/
