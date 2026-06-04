@@ -52,7 +52,6 @@ class Swoole
             'max_wait_time' => $this->config->maxWaitTime,
             'open_http_protocol' => $this->config->httpProtocol,
             'open_http2_protocol' => $this->config->http2Protocol,
-            'http_keepalive_timeout' => $this->config->keepaliveTimeout,
             'max_request' => $this->config->maxRequest,
             'dispatch_mode' => $this->config->dispatchMode,
             'enable_reuse_port' => $this->config->enableReusePort,
