@@ -319,10 +319,10 @@ class Swoole
             $this->connections[$fd] = $connection;
         }
 
-        // Handle PostgreSQL STARTTLS: SSLRequest comes before the real startup message.
-        if ($this->tlsContext !== null && $port === 5432 && TLS::isPostgreSQLSSLRequest($data)) {
-            $server->send($fd, TLS::PG_SSL_RESPONSE_OK);
-            $connection->pendingTls = true;
+        $sslResponse = $this->postgreSQLSSLResponse($data, $port);
+        if ($sslResponse !== null) {
+            $server->send($fd, $sslResponse);
+            $connection->pendingTls = $sslResponse === TLS::PG_SSL_RESPONSE_OK;
 
             return;
         }
@@ -391,6 +391,19 @@ class Swoole
             }
             $server->close($clientFd);
         });
+    }
+
+    private function postgreSQLSSLResponse(string $data, int $port): ?string
+    {
+        if (!\in_array($port, [5432, 6432], true) || !TLS::isPostgreSQLSSLRequest($data)) {
+            return null;
+        }
+
+        if ($this->tlsContext !== null) {
+            return TLS::PG_SSL_RESPONSE_OK;
+        }
+
+        return TLS::PG_SSL_RESPONSE_REJECT;
     }
 
     public function onClose(Server $server, int $fd, int $reactorId): void

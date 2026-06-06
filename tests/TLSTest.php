@@ -3,6 +3,8 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use Utopia\Proxy\Server\TCP\Swoole as TCPServer;
 use Utopia\Proxy\Server\TCP\TLS;
 
 class TLSTest extends TestCase
@@ -270,6 +272,24 @@ class TLSTest extends TestCase
         $this->assertFalse(TLS::isPostgreSQLSSLRequest($startup));
     }
 
+    public function testPostgreSQLSSLRequestIsRejectedWhenTlsIsDisabled(): void
+    {
+        $server = $this->tcpServerWithoutConstructor();
+
+        $this->assertSame(TLS::PG_SSL_RESPONSE_REJECT, $this->postgreSQLSSLResponse($server, TLS::PG_SSL_REQUEST, 5432));
+        $this->assertSame(TLS::PG_SSL_RESPONSE_REJECT, $this->postgreSQLSSLResponse($server, TLS::PG_SSL_REQUEST, 6432));
+    }
+
+    public function testPostgreSQLSSLResponseIgnoresNonSslPackets(): void
+    {
+        $server = $this->tcpServerWithoutConstructor();
+
+        $startup = "\x00\x00\x00\x08\x00\x03\x00\x00";
+
+        $this->assertNull($this->postgreSQLSSLResponse($server, $startup, 5432));
+        $this->assertNull($this->postgreSQLSSLResponse($server, TLS::PG_SSL_REQUEST, 3306));
+    }
+
     public function testIsMySQLSSLRequestWithValidData(): void
     {
         // Build a valid MySQL SSL request: 36+ bytes, sequence ID 1, SSL flag set
@@ -345,5 +365,26 @@ class TLSTest extends TestCase
         $data[4] = "\x00";
         $data[5] = "\x08";
         $this->assertTrue(TLS::isMySQLSSLRequest($data));
+    }
+
+    private function tcpServerWithoutConstructor(): TCPServer
+    {
+        $reflection = new ReflectionClass(TCPServer::class);
+        $server = $reflection->newInstanceWithoutConstructor();
+        $property = $reflection->getProperty('tlsContext');
+        $property->setValue($server, null);
+
+        return $server;
+    }
+
+    private function postgreSQLSSLResponse(TCPServer $server, string $data, int $port): ?string
+    {
+        $reflection = new ReflectionClass(TCPServer::class);
+        $method = $reflection->getMethod('postgreSQLSSLResponse');
+        $response = $method->invoke($server, $data, $port);
+
+        $this->assertTrue(\is_string($response) || $response === null);
+
+        return $response;
     }
 }
