@@ -5,6 +5,7 @@ namespace Utopia\Tests;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use Utopia\Proxy\Server\TCP\Swoole as TCPServer;
+use Utopia\Proxy\Server\TCP\Swoole\Coroutine as CoroutineTCPServer;
 use Utopia\Proxy\Server\TCP\TLS;
 
 class TLSTest extends TestCase
@@ -377,6 +378,26 @@ class TLSTest extends TestCase
         $this->assertStringContainsString('protected function startTLS(Socket $socket): bool', $source);
         $this->assertStringContainsString('$socket->setProtocol($this->tlsContext->toSwooleProtocolConfig())', $source);
         $this->assertStringContainsString('$socket->sslHandshake()', $source);
+    }
+
+    public function testCoroutineServerKeepsConnectionOpenAfterPostgreSQLTlsReject(): void
+    {
+        $source = \file_get_contents(__DIR__ . '/../src/Server/TCP/Swoole/Coroutine.php');
+
+        $this->assertIsString($source);
+        $this->assertMatchesRegularExpression(
+            '/\\$clientSocket->sendAll\\(TLS::PG_SSL_RESPONSE_REJECT\\) === false.*?\\$data = \\$clientSocket->recv\\(\\$bufferSize\\);/s',
+            $source
+        );
+    }
+
+    public function testCoroutineServerReportsConnectionStats(): void
+    {
+        $reflection = new ReflectionClass(CoroutineTCPServer::class);
+        /** @var CoroutineTCPServer $server */
+        $server = $reflection->newInstanceWithoutConstructor();
+
+        $this->assertSame(['connection_num' => 0], $server->stats());
     }
 
     private function tcpServerWithoutConstructor(): TCPServer

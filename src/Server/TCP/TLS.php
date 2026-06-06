@@ -10,9 +10,10 @@ use Utopia\Validator\Text;
  * Holds certificate paths, protocol constraints, cipher configuration,
  * and mTLS (mutual TLS) settings for TLS-terminated TCP connections.
  *
- * Supports:
- * - PostgreSQL STARTTLS (SSLRequest upgrade from plaintext)
- * - MySQL SSL handshake (SSL capability flag in server greeting)
+ * Supports PostgreSQL STARTTLS via SSLRequest upgrade from plaintext.
+ * MySQL-compatible protocols negotiate TLS after a server greeting, so
+ * a generic client-first TCP router cannot terminate that handshake without
+ * a protocol-aware MySQL frontend.
  *
  * Example:
  * ```php

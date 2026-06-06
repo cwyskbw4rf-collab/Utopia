@@ -43,6 +43,8 @@ class Coroutine
     /** @var array<int, TCPAdapter> */
     protected array $adapters = [];
 
+    protected int $connections = 0;
+
     protected Config $config;
 
     protected ?TLSContext $tlsContext = null;
@@ -168,6 +170,17 @@ class Coroutine
 
     protected function handleConnection(Connection $connection, int $port): void
     {
+        $this->connections++;
+
+        try {
+            $this->handleConnectionData($connection, $port);
+        } finally {
+            $this->connections--;
+        }
+    }
+
+    protected function handleConnectionData(Connection $connection, int $port): void
+    {
         /** @var Socket $clientSocket */
         $clientSocket = $connection->exportSocket();
         $clientId = \spl_object_id($connection);
@@ -188,16 +201,17 @@ class Coroutine
 
         if (\in_array($port, [5432, 6432], true) && TLS::isPostgreSQLSSLRequest($data)) {
             if ($this->tlsContext === null) {
-                $clientSocket->sendAll(TLS::PG_SSL_RESPONSE_REJECT);
-                $clientSocket->close();
+                if ($clientSocket->sendAll(TLS::PG_SSL_RESPONSE_REJECT) === false) {
+                    $clientSocket->close();
 
-                return;
-            }
+                    return;
+                }
+            } else {
+                if ($clientSocket->sendAll(TLS::PG_SSL_RESPONSE_OK) === false || !$this->startTLS($clientSocket)) {
+                    $clientSocket->close();
 
-            if ($clientSocket->sendAll(TLS::PG_SSL_RESPONSE_OK) === false || !$this->startTLS($clientSocket)) {
-                $clientSocket->close();
-
-                return;
+                    return;
+                }
             }
 
             /** @var string|false $data */
@@ -266,6 +280,16 @@ class Coroutine
         if ($this->config->logConnections) {
             Console::log("Client #{$clientId} disconnected");
         }
+    }
+
+    /**
+     * @return array{connection_num: int}
+     */
+    public function stats(): array
+    {
+        return [
+            'connection_num' => $this->connections,
+        ];
     }
 
     protected function startTLS(Socket $socket): bool

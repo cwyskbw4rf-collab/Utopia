@@ -23,14 +23,10 @@ use Utopia\Proxy\Sockmap\Loader as Sockmap;
  * PROCESS mode. This matches HAProxy's nbthread-per-core model and roughly
  * doubles small-request throughput on CPU-bound forwarding workloads.
  *
- * Supports optional TLS termination:
- * - PostgreSQL: STARTTLS via SSLRequest/SSLResponse handshake
- * - MySQL: SSL capability flag in server greeting
- *
- * When TLS is enabled, the server uses SWOOLE_SOCK_TCP | SWOOLE_SSL socket type
- * and Swoole handles the TLS handshake natively. For PostgreSQL STARTTLS, the
- * proxy intercepts the SSLRequest message, responds with 'S', and Swoole
- * upgrades the connection to TLS before forwarding the subsequent startup message.
+ * Supports optional TLS termination for protocols that start with TLS
+ * immediately after accept. Database protocols that negotiate TLS after
+ * plaintext protocol bytes, such as PostgreSQL, need a protocol-aware
+ * coroutine server path.
  *
  * Example:
  * ```php
@@ -404,6 +400,26 @@ class Swoole
         }
 
         return TLS::PG_SSL_RESPONSE_REJECT;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function stats(): array
+    {
+        $stats = $this->server->stats();
+        if (!\is_array($stats)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($stats as $key => $value) {
+            if (\is_string($key)) {
+                $normalized[$key] = $value;
+            }
+        }
+
+        return $normalized;
     }
 
     public function onClose(Server $server, int $fd, int $reactorId): void
