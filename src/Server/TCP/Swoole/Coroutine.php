@@ -270,8 +270,9 @@ class Coroutine
         }
 
         $backendSocket->close();
+        // The relay coroutine closes the client socket before signalling,
+        // so no further close is needed once pop() returns.
         $done->pop();
-        $clientSocket->close();
 
         $adapter->closeConnection($clientId);
 

@@ -4,7 +4,6 @@ namespace Utopia\Proxy\Server\TCP;
 
 use Swoole\Constant;
 use Swoole\Coroutine;
-use Swoole\Coroutine\Client;
 use Swoole\Coroutine\Socket;
 use Swoole\Server;
 use Swoole\Server\Port;
@@ -332,7 +331,7 @@ class Swoole
             // forward loop entirely. Otherwise fall back to the coroutine
             // path as before.
             if (!$adapter->activateSockmap($fd)) {
-                $this->forward($server, $fd, $backend);
+                $this->forward($server, $fd, $connection);
             }
 
         } catch (\Exception $e) {
@@ -349,16 +348,17 @@ class Swoole
      * read loop because the backend socket is not registered with the
      * server's reactor.
      */
-    protected function forward(Server $server, int $clientFd, Client $backend): void
+    protected function forward(Server $server, int $clientFd, Connection $connection): void
     {
         $bufferSize = $this->config->receiveBufferSize;
-        $exported = $backend->exportSocket();
+        $exported = $connection->backend?->exportSocket();
         if (!$exported instanceof Socket) {
             $server->close($clientFd);
 
             return;
         }
         $backendSocket = $exported;
+        $connection->backendSocket = $backendSocket;
         // Read with no timeout: the exported backend socket inherits the
         // connect timeout as its read timeout, so a bare recv() would return
         // false after a few idle seconds and tear down the session. Dead
@@ -415,6 +415,11 @@ class Swoole
         if ($adapter !== null) {
             $adapter->closeConnection($fd);
         }
+
+        // Close the exported backend socket to unblock the forward
+        // coroutine's untimed recv() — Client::close() above cannot, since
+        // the Client no longer owns the fd after exportSocket().
+        $connection->backendSocket?->close();
 
         $connection->reset();
     }
