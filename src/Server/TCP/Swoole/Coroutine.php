@@ -226,10 +226,16 @@ class Coroutine
         /** @var Socket $backendSocket */
         $backendSocket = $backendClient->exportSocket();
 
+        // Pipe reads must not inherit socket read timeouts: Client::connect()
+        // re-stamps the connect timeout as the socket's read timeout, so a
+        // bare recv() would return false after a few idle seconds —
+        // indistinguishable from a closed peer — and silently tear down one
+        // direction of a long-lived session. Use -1 (no timeout) and rely on
+        // TCP keepalive and FIN/RST for dead-peer detection.
         \go(function () use ($clientSocket, $backendSocket, $bufferSize, $done): void {
             while (true) {
                 /** @var string|false $data */
-                $data = $backendSocket->recv($bufferSize);
+                $data = $backendSocket->recv($bufferSize, -1);
                 if ($data === false || $data === '') {
                     break;
                 }
@@ -237,6 +243,9 @@ class Coroutine
                     break;
                 }
             }
+            // Unblock the client read loop — it has no timeout, so a dead
+            // backend would otherwise leave it parked forever on an idle client.
+            $clientSocket->close();
             $done->push(true);
         });
 
@@ -251,7 +260,7 @@ class Coroutine
 
         while (true) {
             /** @var string|false $data */
-            $data = $clientSocket->recv($bufferSize);
+            $data = $clientSocket->recv($bufferSize, -1);
             if ($data === false || $data === '') {
                 break;
             }
@@ -261,8 +270,9 @@ class Coroutine
         }
 
         $backendSocket->close();
+        // The relay coroutine closes the client socket before signalling,
+        // so no further close is needed once pop() returns.
         $done->pop();
-        $clientSocket->close();
 
         $adapter->closeConnection($clientId);
 
