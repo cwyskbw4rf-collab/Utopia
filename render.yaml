@@ -2,11 +2,11 @@ services:
   - type: web
     name: utopia-proxy
     runtime: docker
+    region: oregon
     plan: free
-    dockerfile: ./Dockerfile
-    dockerCommand: php -S 0.0.0.0:${PORT} -t public
+    dockerfilePath: rust/Dockerfile
     envVars:
-      - key: PHP_VERSION
-        value: "8.4"
-      - key: PORT
-        value: "3000"
+      - key: TCP_BACKEND_ENDPOINT
+        value: localhost:5432
+      - key: HTTP_BACKEND_ENDPOINT
+        value: localhost:8080
