@@ -7,12 +7,13 @@ RUN apt-get update && apt-get install -y \
     unzip \
     redis-tools \
     libssl-dev \
+    libbrotli-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Redis extension
 RUN pecl install redis && docker-php-ext-enable redis
 
-# Install Swoole with proper flags (optional - allow failure)
+# Install Swoole with proper flags
 RUN pecl install swoole \
     && docker-php-ext-enable swoole \
     || echo "Swoole installation skipped"
