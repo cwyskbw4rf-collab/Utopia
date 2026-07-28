@@ -35,4 +35,5 @@ COPY . .
 
 EXPOSE ${PORT:-3000}
 
-CMD ["php", "-S", "0.0.0.0:${PORT:-3000}", "-t", "public"]
+# Use shell form so environment variables are expanded at container start time
+CMD ["sh", "-c", "php -S 0.0.0.0:${PORT:-3000} -t public"]
