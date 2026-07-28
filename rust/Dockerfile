@@ -115,7 +115,11 @@ RUN addgroup -S app && adduser -S -G app app && \
     chown -R app:app /opt/proxy
 USER app
 
+# Copy startup wrapper (sets HTTP_PORT from Render's $PORT and launches desired protocol)
+COPY rust/start.sh /opt/proxy/start.sh
+RUN chmod +x /opt/proxy/start.sh
+
 EXPOSE 8080 8081 25 5432 3306
 
-ENTRYPOINT ["/sbin/tini", "--", "/opt/proxy/proxy"]
-CMD ["tcp"]
+ENTRYPOINT ["/sbin/tini", "--", "/opt/proxy/start.sh"]
+CMD ["http"]
