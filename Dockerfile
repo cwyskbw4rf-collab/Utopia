@@ -33,7 +33,11 @@ RUN composer install --no-dev --optimize-autoloader --ignore-platform-reqs || \
 # Copy application code
 COPY . .
 
+# Copy start wrapper and make it executable
+COPY bin/start-php.sh /usr/local/bin/start-php.sh
+RUN chmod +x /usr/local/bin/start-php.sh
+
 EXPOSE ${PORT:-3000}
 
-# Use shell form so environment variables are expanded at container start time
-CMD ["sh", "-c", "php -S 0.0.0.0:${PORT:-3000} -t public"]
+# Use the start wrapper as the entrypoint so $PORT is handled and logged
+ENTRYPOINT ["/usr/local/bin/start-php.sh"]
