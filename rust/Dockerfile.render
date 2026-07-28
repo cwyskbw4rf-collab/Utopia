@@ -1,0 +1,48 @@
+# Lightweight Dockerfile for Render / CI builds
+# This Dockerfile builds only the Rust binary (no BPF/sockmap compilation),
+# reduces installed build dependencies, and produces a small runtime image.
+# It is intended for environments with constrained build time / memory (Render).
+
+# Stage: builder
+FROM rust:1.82-alpine AS builder
+
+# Install only essentials for a normal release build (no libbpf/clang-libs)
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev build-base
+
+WORKDIR /src
+
+# Cache dependencies (copy manifests and perform a dummy build)
+COPY rust/Cargo.toml rust/Cargo.lock ./
+COPY rust/crates/utopia-proxy/Cargo.toml crates/utopia-proxy/Cargo.toml
+COPY rust/bins/proxy/Cargo.toml bins/proxy/Cargo.toml
+RUN mkdir -p crates/utopia-proxy/src bins/proxy/src && \
+    echo "fn main(){}" > bins/proxy/src/main.rs && \
+    echo "" > crates/utopia-proxy/src/lib.rs && \
+    cargo build --release --bin proxy || true
+
+# Copy sources and build release binary
+COPY rust/ ./
+RUN touch crates/utopia-proxy/src/lib.rs bins/proxy/src/main.rs && \
+    cargo build --release --bin proxy && \
+    strip target/release/proxy || true
+
+# Stage: runtime (alpine minimal)
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tini && rm -rf /var/cache/apk/*
+
+WORKDIR /opt/proxy
+
+# Copy the built binary from builder
+COPY --from=builder /src/target/release/proxy /opt/proxy/proxy
+
+# Copy start wrapper
+COPY rust/start.sh /opt/proxy/start.sh
+RUN chmod +x /opt/proxy/start.sh
+
+# Do not enable jemalloc or BPF in this lightweight image (smaller runtime image)
+
+EXPOSE 8080
+
+ENTRYPOINT ["/sbin/tini", "--", "/opt/proxy/start.sh"]
+CMD ["http"]
