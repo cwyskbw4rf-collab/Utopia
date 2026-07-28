@@ -4,9 +4,11 @@ services:
     runtime: docker
     region: oregon
     plan: free
-    dockerfilePath: rust/Dockerfile
+    dockerfilePath: rust/Dockerfile.render
     envVars:
-      - key: TCP_BACKEND_ENDPOINT
-        value: localhost:5432
+      - key: PROXY_PROTOCOL
+        value: http
       - key: HTTP_BACKEND_ENDPOINT
-        value: localhost:8080
+        value: host.docker.internal:5678
+      - key: TCP_BACKEND_ENDPOINT
+        value: 127.0.0.1:15432
